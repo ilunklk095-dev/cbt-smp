@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isAdmin() { return signedIn() && me().data.role == 'admin'; }
+    function isStudent() { return signedIn() && me().data.role == 'student'; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+
+      match /questions/{questionId} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    match /attempts/{attemptId} {
+      allow read: if isAdmin() || (isStudent() && resource.data.studentUid == request.auth.uid);
+
+      allow create: if isStudent()
+        && request.resource.data.studentUid == request.auth.uid
+        && request.resource.data.status == 'ongoing';
+
+      allow update: if isAdmin() || (
+        isStudent()
+        && resource.data.studentUid == request.auth.uid
+        && request.resource.data.studentUid == request.auth.uid
+        && resource.data.status == 'ongoing'
+        && request.resource.data.status in ['ongoing', 'submitted']
+      );
+
+      allow delete: if isAdmin();
+    }
+  }
+}
