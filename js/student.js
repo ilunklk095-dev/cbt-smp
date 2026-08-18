@@ -191,7 +191,7 @@ function confirmSubmit() {
     </div>
   `;
 
-  $('#examView').appendChild(overlay);
+  document.body.appendChild(overlay);
 
   $('#cancelFinishBtn').onclick = () => {
     overlay.remove();
@@ -415,7 +415,7 @@ function showExamResult(data) {
     </div>
   `;
 
-  $('#examView').appendChild(overlay);
+  document.body.appendChild(overlay);
 
   $('#resultDoneBtn').onclick =
     async () => {
