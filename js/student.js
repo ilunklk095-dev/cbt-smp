@@ -135,18 +135,306 @@ function startTimer(){
 }
 function handleVisibility(){ if(document.hidden&&!state.submitting){state.violations++; saveAttempt(); toast(`Peringatan: keluar dari halaman ujian (${state.violations}/${state.subject.maxWarnings||3}).`,'warn',4500); if(state.violations>=Number(state.subject.maxWarnings||3)) submitExam(true); } }
 function beforeUnload(e){ if(!state.submitting){e.preventDefault();e.returnValue='';} }
-function confirmSubmit(){
-  const answered=Object.keys(state.answers).length, total=state.questions.length;
-  modal({title:'Selesaikan ujian?',subtitle:`${answered} dari ${total} soal sudah dijawab.`,body:`<div class="callout ${answered<total?'warn':''}">${answered<total?`Masih ada <b>${total-answered}</b> soal yang belum dijawab. Anda tetap dapat mengakhiri ujian.`:'Semua soal sudah dijawab. Pastikan pilihan Anda sudah benar.'}</div>`,footer:`<button class="btn btn-outline" data-cancel-submit>Kembali</button><button id="finalSubmitBtn" class="btn btn-primary">Ya, Kumpulkan</button>`});
-  $('[data-cancel-submit]').onclick=closeModal; $('#finalSubmitBtn').onclick=()=>submitExam(false);
+function confirmSubmit() {
+  if (state.submitting) return;
+
+  const answered = Object.keys(state.answers).length;
+  const total = state.questions.length;
+  const unanswered = total - answered;
+
+  document.getElementById('examFinishOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'examFinishOverlay';
+  overlay.className = 'exam-finish-overlay';
+
+  overlay.innerHTML = `
+    <div class="exam-finish-card">
+      <div class="finish-icon">✓</div>
+
+      <h2>Selesaikan Ujian?</h2>
+
+      <p>
+        Anda telah menjawab
+        <b>${answered} dari ${total}</b> soal.
+      </p>
+
+      ${
+        unanswered > 0
+          ? `<div class="finish-warning">
+              Masih ada <b>${unanswered}</b> soal yang belum dijawab.
+             </div>`
+          : `<div class="finish-success">
+              Semua soal sudah dijawab.
+             </div>`
+      }
+
+      <p class="finish-info">
+        Setelah dikumpulkan, jawaban tidak dapat diubah kembali.
+      </p>
+
+      <div class="finish-actions">
+        <button
+          id="cancelFinishBtn"
+          class="btn btn-outline"
+          type="button">
+          Kembali
+        </button>
+
+        <button
+          id="confirmFinishBtn"
+          class="btn btn-primary"
+          type="button">
+          Ya, Kumpulkan
+        </button>
+      </div>
+    </div>
+  `;
+
+  $('#examView').appendChild(overlay);
+
+  $('#cancelFinishBtn').onclick = () => {
+    overlay.remove();
+  };
+
+  $('#confirmFinishBtn').onclick = async () => {
+    const btn = $('#confirmFinishBtn');
+
+    btn.disabled = true;
+    btn.textContent = 'Menyimpan nilai...';
+
+    await submitExam(false);
+  };
 }
-async function submitExam(auto=false){
-  if(state.submitting)return; state.submitting=true; closeModal(); clearInterval(state.timer); clearTimeout(state.saveTimer);
-  let earned=0,max=0,correct=0;
-  state.questions.forEach(q=>{const pts=Number(q.points||1);max+=pts;if(Number(state.answers[q.id])===Number(q.correctIndex)){earned+=pts;correct++;}});
-  const score=max?Math.round((earned/max)*100):0;
-  try{await updateDoc(doc(db,'attempts',state.attempt.id),{answers:state.answers,flags:state.flags,violations:state.violations,status:'submitted',score,correctCount:correct,totalQuestions:state.questions.length,earnedPoints:earned,maxPoints:max,submittedAt:serverTimestamp(),autoSubmitted:auto,updatedAt:serverTimestamp()});}catch(e){state.submitting=false;toast('Gagal menyimpan nilai. Periksa koneksi.','error');return;}
-  cleanupExam(); showScore({score,correctCount:correct,totalQuestions:state.questions.length,violations:state.violations,autoSubmitted:auto},state.subject);
+
+
+async function submitExam(auto = false) {
+  if (state.submitting) return;
+
+  state.submitting = true;
+
+  clearInterval(state.timer);
+  clearTimeout(state.saveTimer);
+
+  let earned = 0;
+  let max = 0;
+  let correct = 0;
+
+  state.questions.forEach(q => {
+    const points = Number(q.points || 1);
+
+    max += points;
+
+    if (
+      Number(state.answers[q.id]) ===
+      Number(q.correctIndex)
+    ) {
+      earned += points;
+      correct++;
+    }
+  });
+
+  const score =
+    max > 0
+      ? Math.round((earned / max) * 100)
+      : 0;
+
+  try {
+
+    await updateDoc(
+      doc(db, 'attempts', state.attempt.id),
+      {
+        answers: state.answers,
+        flags: state.flags,
+        violations: state.violations,
+
+        status: 'submitted',
+
+        score: score,
+        correctCount: correct,
+        totalQuestions: state.questions.length,
+
+        earnedPoints: earned,
+        maxPoints: max,
+
+        submittedAt: serverTimestamp(),
+        autoSubmitted: auto,
+        updatedAt: serverTimestamp()
+      }
+    );
+
+  } catch (error) {
+
+    console.error('Gagal menyimpan nilai:', error);
+
+    state.submitting = false;
+
+    const btn =
+      document.getElementById('confirmFinishBtn');
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Ya, Kumpulkan';
+    }
+
+    toast(
+      'Nilai gagal disimpan: ' +
+      (error.message || 'Periksa koneksi internet.'),
+      'error',
+      7000
+    );
+
+    startTimer();
+
+    return;
+  }
+
+  document
+    .getElementById('examFinishOverlay')
+    ?.remove();
+
+  document.removeEventListener(
+    'visibilitychange',
+    handleVisibility
+  );
+
+  window.removeEventListener(
+    'beforeunload',
+    beforeUnload
+  );
+
+  showExamResult({
+    score,
+    correctCount: correct,
+    totalQuestions: state.questions.length,
+    violations: state.violations,
+    autoSubmitted: auto
+  });
+}
+
+
+function showExamResult(data) {
+
+  document
+    .getElementById('examResultOverlay')
+    ?.remove();
+
+  const overlay =
+    document.createElement('div');
+
+  overlay.id = 'examResultOverlay';
+  overlay.className = 'exam-result-overlay';
+
+  const lulus =
+    Number(data.score) >= 75;
+
+  overlay.innerHTML = `
+    <div class="exam-result-card">
+
+      <div class="result-check">
+        ✓
+      </div>
+
+      <p class="result-label">
+        UJIAN SELESAI
+      </p>
+
+      <h1>Jawaban berhasil dikumpulkan</h1>
+
+      <p class="result-subject">
+        ${escapeHtml(state.subject.name)}
+      </p>
+
+      <div class="result-score-box">
+
+        <span>Nilai Anda</span>
+
+        <strong>
+          ${Number(data.score || 0)}
+        </strong>
+
+        <div class="
+          result-status
+          ${lulus ? 'passed' : 'failed'}
+        ">
+          ${lulus ? 'TUNTAS' : 'BELUM TUNTAS'}
+        </div>
+
+      </div>
+
+      <div class="result-stats">
+
+        <div>
+          <strong>
+            ${data.correctCount}
+          </strong>
+
+          <span>
+            Jawaban Benar
+          </span>
+        </div>
+
+        <div>
+          <strong>
+            ${data.totalQuestions -
+              data.correctCount}
+          </strong>
+
+          <span>
+            Jawaban Salah
+          </span>
+        </div>
+
+        <div>
+          <strong>
+            ${data.totalQuestions}
+          </strong>
+
+          <span>
+            Total Soal
+          </span>
+        </div>
+
+      </div>
+
+      ${
+        data.autoSubmitted
+          ? `<div class="finish-warning">
+              Ujian dikumpulkan otomatis.
+             </div>`
+          : ''
+      }
+
+      <button
+        id="resultDoneBtn"
+        class="btn btn-primary btn-block"
+        type="button">
+        Kembali ke Daftar Ujian
+      </button>
+
+    </div>
+  `;
+
+  $('#examView').appendChild(overlay);
+
+  $('#resultDoneBtn').onclick =
+    async () => {
+
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+        } catch {}
+      }
+
+      overlay.remove();
+
+      cleanupExam();
+
+      location.hash =
+        '#student-home';
+
+      location.reload();
+    };
 }
 function cleanupExam(){document.removeEventListener('visibilitychange',handleVisibility);window.removeEventListener('beforeunload',beforeUnload);document.exitFullscreen?.().catch(()=>{});$('#examView').classList.add('hidden');$('#appView').classList.remove('hidden');document.body.style.overflow='';}
 function showScore(data,subject){
