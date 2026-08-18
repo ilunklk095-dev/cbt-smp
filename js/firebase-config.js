@@ -6,7 +6,7 @@ import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.16.0/firebas
 // WAJIB: GANTI DENGAN CONFIG FIREBASE MILIK ANDA
 // Firebase Console > Project settings > Your apps > Web app
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBGRSLuywBbJVVNaOrKWDEX6yX49HP__EU",
   authDomain: "cbt-smp.firebaseapp.com",
   projectId: "cbt-smp",
