@@ -45,6 +45,7 @@ root.querySelectorAll('[data-start-subject]').forEach(btn => {
     }
   });
 });
+}
 
 function getScheduleStatus(s){
   const now=Date.now(); const start=s.scheduleStart?new Date(s.scheduleStart).getTime():0; const end=s.scheduleEnd?new Date(s.scheduleEnd).getTime():Infinity;
