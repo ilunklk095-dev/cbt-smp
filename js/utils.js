@@ -42,7 +42,15 @@ export function formatDate(value) {
   return new Intl.DateTimeFormat('id-ID',{dateStyle:'long'}).format(d);
 }
 export function normalizeUsername(v='') { return v.trim().toLowerCase().replace(/\s+/g,''); }
-export function usernameToEmail(username) { return `${normalizeUsername(username)}@cbt.local`; }
+export function usernameToEmail(value = '') {
+  const username = normalizeUsername(value);
+
+  if (username.includes('@')) {
+    return username;
+  }
+
+  return `${username}@cbt.local`;
+}
 export function randomId(len=8) { const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; return Array.from({length:len},()=>chars[Math.floor(Math.random()*chars.length)]).join(''); }
 export function downloadText(filename, text, type='text/plain;charset=utf-8') { const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url); }
 export function csvEscape(v){ const s=String(v??''); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }
