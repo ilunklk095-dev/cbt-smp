@@ -20,8 +20,31 @@ export async function renderStudentHome(container, profile){
     const disabled = status.code !== 'open';
     return `<article class="card subject-card"><span class="subject-code">${escapeHtml(s.code||'MAPEL')}</span><h3>${escapeHtml(s.name)}</h3><p>${status.text}</p><div class="subject-meta"><span class="badge badge-indigo">⏱ ${Number(s.durationMinutes||60)} menit</span><span class="badge ${disabled?'badge-amber':'badge-green'}">${disabled?'Terjadwal':'Tersedia'}</span></div><div class="subject-actions"><small class="muted">${s.scheduleStart?formatDateTime(s.scheduleStart):'Tanpa batas jadwal'}</small><button class="btn btn-primary" data-start-subject="${s.id}" ${disabled?'disabled':''}>Pilih</button></div></article>`;
   }).join('');
-  root.querySelectorAll('[data-start-subject]').forEach(btn=>btn.addEventListener('click',()=>openIdentityForm(btn.dataset.startSubject)));
-}
+root.querySelectorAll('[data-start-subject]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = 'Memuat...';
+
+      await openIdentityForm(btn.dataset.startSubject);
+
+      btn.textContent = oldText;
+      btn.disabled = false;
+    } catch (error) {
+      console.error('Gagal membuka ujian:', error);
+
+      toast(
+        'Gagal membuka ujian: ' + (error.message || 'Terjadi kesalahan'),
+        'error',
+        5000
+      );
+
+      btn.textContent = 'Pilih';
+      btn.disabled = false;
+    }
+  });
+});
 
 function getScheduleStatus(s){
   const now=Date.now(); const start=s.scheduleStart?new Date(s.scheduleStart).getTime():0; const end=s.scheduleEnd?new Date(s.scheduleEnd).getTime():Infinity;
