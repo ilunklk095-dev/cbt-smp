@@ -1,38 +1,79 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
-    function isAdmin() { return signedIn() && me().data.role == 'admin'; }
-    function isStudent() { return signedIn() && me().data.role == 'student'; }
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() && me().data.role == 'admin';
+    }
+
+    function isStudent() {
+      return signedIn() && me().data.role == 'student';
+    }
+
+    // =========================
+    // USERS
+    // =========================
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() &&
+        (request.auth.uid == uid || isAdmin());
+
       allow create, update, delete: if isAdmin();
     }
 
+    // =========================
+    // SETTINGS
+    // =========================
     match /settings/{docId} {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
 
+    // =========================
+    // SUBJECTS / MATA PELAJARAN
+    // =========================
     match /subjects/{subjectId} {
       allow read: if signedIn();
       allow write: if isAdmin();
 
+      // SOAL
       match /questions/{questionId} {
         allow read: if signedIn();
         allow write: if isAdmin();
       }
     }
 
+    // =========================
+    // HASIL / ATTEMPT UJIAN
+    // =========================
     match /attempts/{attemptId} {
-      allow read: if isAdmin() || (isStudent() && resource.data.studentUid == request.auth.uid);
 
+      // Admin boleh membaca semua attempt.
+      // Siswa boleh membaca dokumen attempt miliknya.
+      // Ini juga memungkinkan getDoc() saat attempt belum dibuat.
+      allow get: if isAdmin() || (
+        isStudent() &&
+        attemptId.matches(request.auth.uid + '_.*')
+      );
+
+      // Hanya admin yang boleh mengambil daftar seluruh attempt.
+      allow list: if isAdmin();
+
+      // Siswa boleh membuat attempt miliknya sendiri.
       allow create: if isStudent()
         && request.resource.data.studentUid == request.auth.uid
-        && request.resource.data.status == 'ongoing';
+        && request.resource.data.status == 'ongoing'
+        && attemptId.matches(request.auth.uid + '_.*');
 
+      // Siswa boleh menyimpan jawaban dan menyelesaikan ujian.
       allow update: if isAdmin() || (
         isStudent()
         && resource.data.studentUid == request.auth.uid
@@ -43,5 +84,6 @@ service cloud.firestore {
 
       allow delete: if isAdmin();
     }
+
   }
 }
